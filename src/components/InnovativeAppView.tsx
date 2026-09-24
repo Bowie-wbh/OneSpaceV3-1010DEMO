@@ -2648,7 +2648,7 @@ function FireMonitoringTaskBar({ onClose }: { onClose: () => void }) {
         />
         <FireTaskFlowStep
           stepIndex={2}
-          title="筛选任务"
+          title="规划任务"
           revealedCount={filteredRevealed}
           countLabel="个"
           items={FIRE_TASK_FILTERED_LIST}
