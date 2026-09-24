@@ -3474,8 +3474,12 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
         {/* 看板区（split / kanban 视图下展示） */}
         {showKanban && (
           <div id="innovative-app-dashboard" ref={kanbanPanelRef} className="flex-1 h-full min-h-0 flex flex-col animate-fadeIn text-left select-none relative overflow-hidden rounded-2xl border border-slate-200/90 dark:border-white/[0.08] bg-slate-950 shadow-lg">
-        {/* 1.6 看板左上角总体数据卡（三张独立卡片：在轨卫星、整体算力、传感器，宽度紧凑精致，4K 屏适度放大） */}
-        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 2xl:top-6 2xl:left-6 z-20 flex items-center gap-1.5 sm:gap-2 2xl:gap-3 pointer-events-auto">
+        {/* 1.6 看板左上角总体数据卡（三张独立卡片：在轨卫星、整体算力、传感器，宽度紧凑精致，4K 屏适度放大），以「OneEarth」标题统一包装 */}
+        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 2xl:top-6 2xl:left-6 z-20 flex flex-col items-start gap-1.5 2xl:gap-2 pointer-events-auto">
+          <span className="pl-1 text-xl sm:text-2xl 2xl:text-4xl font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-sky-200 via-cyan-100 to-white drop-shadow-[0_0_8px_rgba(56,189,248,0.4)]">
+            OneEarth
+          </span>
+          <div className="flex items-center gap-1.5 sm:gap-2 2xl:gap-3">
           {/* 卡片 1：在轨卫星 */}
           <div className="relative group overflow-hidden rounded-xl 2xl:rounded-2xl p-[1px] transition-all duration-300 hover:scale-[1.03] shadow-[0_8px_24px_rgba(0,0,0,0.3),0_0_12px_rgba(56,189,248,0.15)]">
             <div className="absolute inset-0 bg-gradient-to-br from-sky-500/40 via-cyan-500/20 to-blue-600/30 rounded-xl 2xl:rounded-2xl group-hover:from-sky-400/60 group-hover:via-cyan-400/35 group-hover:to-blue-500/50 transition-colors" />
@@ -3525,6 +3529,7 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
                 <span className="text-[10px] sm:text-xs 2xl:text-sm text-purple-200/90 font-medium">种</span>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
