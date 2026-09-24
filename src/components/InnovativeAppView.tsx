@@ -27,7 +27,6 @@ import {
   ArrowDown,
   Plus, 
   X, 
-  Filter, 
   Search, 
   Globe, 
   Globe2,
@@ -45,7 +44,6 @@ import {
   BarChart3,
   Sun,
   Moon,
-  Radio,
   Database,
   Cpu,
   Menu,
@@ -145,6 +143,44 @@ function createAirportDotIcon() {
   });
   return _airportDotIcon;
 }
+
+// ── 自然资源普查「绿地/森林」筛选：地球上绿色圆点标注对应区域 ───
+let _natureZoneDotIcon: L.DivIcon | null = null;
+
+function createNatureZoneDotIcon() {
+  if (_natureZoneDotIcon) return _natureZoneDotIcon;
+  const size = 16;
+  _natureZoneDotIcon = L.divIcon({
+    html: `
+      <div style="
+        width:${size}px;height:${size}px;
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <div style="
+          width:10px;height:10px;
+          border-radius:50%;
+          background:#22c55e;
+          border:2px solid #ffffff;
+          box-shadow:0 0 6px rgba(34, 197, 94, 0.85);
+        "></div>
+      </div>
+    `,
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+  return _natureZoneDotIcon;
+}
+
+// ── 自然资源普查「绿地/森林」筛选区域列表（凤凰古城周边，供地图标绘与下拉筛选共用）───
+const NATURE_SURVEY_ZONE_LIST = [
+  { name: '南华山国家森林公园', type: '森林' as const, lng: 109.5945, lat: 27.9485 },
+  { name: '腊尔山森林生态保护区', type: '森林' as const, lng: 109.5820, lat: 27.9620 },
+  { name: '高峰界原始森林保护区', type: '森林' as const, lng: 109.6180, lat: 27.9410 },
+  { name: '沱江滨江生态绿地', type: '绿地' as const, lng: 109.6072, lat: 27.9518 },
+  { name: '东岭郊野公园绿地', type: '绿地' as const, lng: 109.6110, lat: 27.9590 },
+  { name: '望佛山生态绿地', type: '绿地' as const, lng: 109.5890, lat: 27.9455 },
+];
 
 // ── 自定义 Leaflet 地标 Marker 图标 ─────────────────────────────────────────
 const _iconCache: Record<string, L.DivIcon> = {};
@@ -937,7 +973,7 @@ function LocationSearch({
             )}
           </div>
         </div>,
-        document.body
+        document.fullscreenElement ?? document.body
       )}
     </div>
   );
@@ -1032,7 +1068,7 @@ function TimeSelectDropdown({
             </button>
           ))}
         </div>,
-        document.body
+        document.fullscreenElement ?? document.body
       )}
     </div>
   );
@@ -1212,6 +1248,8 @@ interface MonitorCardProps {
   weatherAirportList?: AirportWeatherItem[];
   selectedWeatherAirport?: AirportWeatherItem | null;
   onSelectWeatherAirport?: (airport: AirportWeatherItem | null) => void;
+  fireEventOpen?: boolean;
+  onToggleFireEvent?: () => void;
 }
 
 function MonitorCard({
@@ -1245,6 +1283,8 @@ function MonitorCard({
   weatherAirportList,
   selectedWeatherAirport,
   onSelectWeatherAirport,
+  fireEventOpen,
+  onToggleFireEvent,
 }: MonitorCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [internalActiveCategory] = useState<'fire' | 'building' | 'satellite'>('fire');
@@ -1347,15 +1387,17 @@ function MonitorCard({
   const buildingPointsCount = spatialPoints.filter((p) => p.type === 'building').length;
   const [fireFilter, setFireFilter] = useState<'fire' | 'safe'>('fire');
 
-  // 第一部分「全球普查任务」分类下拉筛选：全部 / 机场 / 古建筑
-  const [surveyFilter, setSurveyFilter] = useState<'all' | 'airport' | 'building'>('all');
-  const [isSurveyDropdownOpen, setIsSurveyDropdownOpen] = useState(false);
-  const surveyRegionCount = surveyFilter === 'airport'
-    ? AIRPORT_WEATHER_LIST.length
-    : surveyFilter === 'building'
-    ? buildingPointsCount
-    : buildingPointsCount + AIRPORT_WEATHER_LIST.length;
-  const tokenizedCount = surveyRegionCount * 156382 + 42918;
+  // 第一部分「全球普查任务」现拆分为两张可独立展开的卡片：自然资源普查（绿地/森林）/ 古建筑普查
+  const buildingSpatialPoints = useMemo(() => spatialPoints.filter((p) => p.type === 'building'), [spatialPoints]);
+  const [natResourceOpen, setNatResourceOpen] = useState(true);
+  const [natResourceZone, setNatResourceZone] = useState<string | null>(null);
+  const [isNatResourceDropdownOpen, setIsNatResourceDropdownOpen] = useState(false);
+  const natResourceRegionCount = NATURE_SURVEY_ZONE_LIST.length;
+  const natResourceTokenCount = natResourceRegionCount * 156382 + 42918;
+
+  const [ancientBuildingOpen, setAncientBuildingOpen] = useState(false);
+  const [ancientBuildingZone, setAncientBuildingZone] = useState<string | null>(null);
+  const [isAncientBuildingDropdownOpen, setIsAncientBuildingDropdownOpen] = useState(false);
 
   // 「杭州米塔碳·机场短临期气象预报」机场筛选下拉（通过 Portal 挂载到 body，避免被兄弟卡片层级遮挡）
   const [isAirportFilterOpen, setIsAirportFilterOpen] = useState(false);
@@ -1428,17 +1470,14 @@ function MonitorCard({
     };
   }, [isLandslideFilterOpen]);
 
-  // 古建筑 / 机场标点显隐随「全部/机场/古建筑」筛选联动：二者互斥单选，「全部」下同时显示
+  // 古建筑 / 机场标点默认随看板一两张普查卡片一起常显
   useEffect(() => {
-    const shouldShowBuilding = surveyFilter !== 'airport';
-    if (shouldShowBuilding !== showBuildingSpatial) onToggleBuildingSpatial();
-    const shouldShowAirport = surveyFilter !== 'building';
-    if (shouldShowAirport !== showAirportSpatial) onToggleAirportSpatial();
+    if (!showBuildingSpatial) onToggleBuildingSpatial();
+    if (!showAirportSpatial) onToggleAirportSpatial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyFilter]);
+  }, []);
 
-  // 第二部分「事件触发任务」三张可展开列表的展开状态
-  const [fireEventOpen, setFireEventOpen] = useState(true);
+  // 第二部分「事件触发任务」三张可展开列表的展开状态（全球林火自主巡查的展开状态由父组件控制，用于联动林火检测任务看板）
   const [landslideEventOpen, setLandslideEventOpen] = useState(false);
 
   // 地点搜索面板点位：按有火点/无火点状态筛选
@@ -1469,61 +1508,125 @@ function MonitorCard({
           <SatelliteDashboardCard selectedId={satId} onSelectId={onSelectSatelliteId || (() => {})} hideContainer />
         ) : (
           <div className="p-2.5 2xl:p-3.5 space-y-2.5 2xl:space-y-3">
-            {/* 看板一：全球普查任务 —— 总体卡（普查区域 / 021Token化）+ 分类下拉筛选 */}
+            {/* 看板一：全球普查任务 —— 自然资源普查 / 古建筑普查两张可展开卡 */}
             <div className="rounded-xl 2xl:rounded-2xl border border-white/10 bg-white/[0.04] shadow-lg relative z-20">
-              <div className="p-2.5 2xl:p-3.5">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="w-1 h-3 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
-                  <h4 className="text-sm 2xl:text-base font-extrabold tracking-wide text-blue-flow">全球普查任务</h4>
-                </div>
+              <div className="px-2.5 pt-2.5 2xl:px-3.5 2xl:pt-3.5 flex items-center gap-1.5">
+                <span className="w-1 h-3 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
+                <h4 className="text-sm 2xl:text-base font-extrabold tracking-wide text-blue-flow">全球普查任务</h4>
+              </div>
 
-                <div className="grid grid-cols-2 gap-1.5 2xl:gap-2 mb-2">
-                  <div className="p-2 2xl:p-2.5 rounded-lg 2xl:rounded-xl border bg-gradient-to-b from-sky-500/18 via-sky-950/20 to-transparent border-sky-500/30 flex flex-col items-center justify-center gap-1 text-center backdrop-blur-md">
-                    <span className="text-[11px] 2xl:text-xs font-medium text-slate-300 leading-tight">普查区域</span>
-                    <div className="text-base 2xl:text-lg font-bold font-mono leading-tight text-slate-100">
-                      <AnimatedNumber value={surveyRegionCount} />
+              <div className="p-2.5 2xl:p-3.5 space-y-2 2xl:space-y-2.5">
+                <MonitorSection
+                  label={<span className="text-[12px] 2xl:text-[13px] font-bold text-slate-100 tracking-wide">自然资源普查</span>}
+                  badge={<span className="text-[9px] 2xl:text-[10px] text-slate-500 font-mono">{natResourceRegionCount} 个</span>}
+                  open={natResourceOpen}
+                  onToggle={() => setNatResourceOpen((v) => !v)}
+                  accent="sky"
+                >
+                  <div className="grid grid-cols-2 gap-1.5 2xl:gap-2">
+                    <div className="p-2 2xl:p-2.5 rounded-lg 2xl:rounded-xl border bg-gradient-to-b from-sky-500/18 via-sky-950/20 to-transparent border-sky-500/30 flex flex-col items-center justify-center gap-1 text-center backdrop-blur-md">
+                      <span className="text-[11px] 2xl:text-xs font-medium text-slate-300 leading-tight">普查区域</span>
+                      <div className="text-base 2xl:text-lg font-bold font-mono leading-tight text-slate-100">
+                        <AnimatedNumber value={natResourceRegionCount} />
+                      </div>
+                      <span className="text-[11px] 2xl:text-xs text-slate-400 leading-tight">个</span>
                     </div>
-                    <span className="text-[11px] 2xl:text-xs text-slate-400 leading-tight">个</span>
-                  </div>
-                  <div className="p-2 2xl:p-2.5 rounded-lg 2xl:rounded-xl border bg-gradient-to-b from-sky-500/18 via-sky-950/20 to-transparent border-sky-500/30 flex flex-col items-center justify-center gap-1 text-center backdrop-blur-md">
-                    <span className="text-[11px] 2xl:text-xs font-medium text-slate-300 leading-tight">021Token化</span>
-                    <div className="text-base 2xl:text-lg font-bold font-mono leading-tight text-slate-100">
-                      <AnimatedNumber value={tokenizedCount} formatter={(n) => n.toLocaleString()} />
+                    <div className="p-2 2xl:p-2.5 rounded-lg 2xl:rounded-xl border bg-gradient-to-b from-sky-500/18 via-sky-950/20 to-transparent border-sky-500/30 flex flex-col items-center justify-center gap-1 text-center backdrop-blur-md">
+                      <span className="text-[11px] 2xl:text-xs font-medium text-slate-300 leading-tight">021统一表征</span>
+                      <div className="text-base 2xl:text-lg font-bold font-mono leading-tight text-slate-100">
+                        <AnimatedNumber value={natResourceTokenCount} formatter={(n) => n.toLocaleString()} />
+                      </div>
+                      <span className="text-[11px] 2xl:text-xs text-slate-400 leading-tight">tokens</span>
                     </div>
-                    <span className="text-[11px] 2xl:text-xs text-slate-400 leading-tight">tokens</span>
                   </div>
-                </div>
 
-                <div className="relative">
-                  <button
-                    onClick={() => setIsSurveyDropdownOpen((v) => !v)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 2xl:px-3 2xl:py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
-                  >
-                    <span className="text-[11px] 2xl:text-xs font-semibold text-slate-200">
-                      {surveyFilter === 'all' ? '全部' : surveyFilter === 'airport' ? '机场' : '古建筑'}
-                    </span>
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isSurveyDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {isSurveyDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-[#0c101c]/95 border border-white/15 rounded-xl shadow-2xl overflow-hidden backdrop-blur-2xl animate-fadeIn divide-y divide-white/[0.06]">
-                      {([
-                        { key: 'all', label: '全部' },
-                        { key: 'airport', label: '机场' },
-                        { key: 'building', label: '古建筑' },
-                      ] as const).map((opt) => (
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsNatResourceDropdownOpen((v) => !v)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 2xl:px-3 2xl:py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                    >
+                      <span className="text-[11px] 2xl:text-xs font-semibold text-slate-200 truncate">
+                        {natResourceZone ? natResourceZone : '筛选区域：全部'}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isNatResourceDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isNatResourceDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 max-h-48 overflow-y-auto bg-[#0c101c]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl animate-fadeIn divide-y divide-white/[0.06]">
                         <button
-                          key={opt.key}
-                          onClick={() => { setSurveyFilter(opt.key); setIsSurveyDropdownOpen(false); }}
+                          onClick={() => { setNatResourceZone(null); setIsNatResourceDropdownOpen(false); }}
                           className={`w-full px-2.5 py-2 2xl:px-3 2xl:py-2.5 text-left text-[11px] 2xl:text-xs font-semibold transition-colors cursor-pointer ${
-                            surveyFilter === opt.key ? 'bg-sky-500/20 text-sky-300' : 'text-slate-300 hover:bg-white/10'
+                            !natResourceZone ? 'bg-sky-500/20 text-sky-300' : 'text-slate-300 hover:bg-white/10'
                           }`}
                         >
-                          {opt.label}
+                          全部
                         </button>
-                      ))}
+                        {NATURE_SURVEY_ZONE_LIST.map((zone) => (
+                          <button
+                            key={zone.name}
+                            onClick={() => { setNatResourceZone(zone.name); setIsNatResourceDropdownOpen(false); }}
+                            className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 2xl:px-3 2xl:py-2.5 text-left text-[11px] 2xl:text-xs font-semibold transition-colors cursor-pointer ${
+                              natResourceZone === zone.name ? 'bg-sky-500/20 text-sky-300' : 'text-slate-300 hover:bg-white/10'
+                            }`}
+                          >
+                            <span className="truncate">{zone.name}</span>
+                            <span className="text-[9px] 2xl:text-[10px] shrink-0 text-slate-500 font-normal">{zone.type}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </MonitorSection>
+
+                <MonitorSection
+                  label={<span className="text-[12px] 2xl:text-[13px] font-bold text-slate-100 tracking-wide">古建筑普查</span>}
+                  badge={<span className="text-[9px] 2xl:text-[10px] text-slate-500 font-mono">{buildingPointsCount} 处</span>}
+                  open={ancientBuildingOpen}
+                  onToggle={() => setAncientBuildingOpen((v) => !v)}
+                  accent="amber"
+                >
+                  <div className="p-2 2xl:p-2.5 rounded-lg 2xl:rounded-xl border bg-gradient-to-b from-amber-500/18 via-amber-950/20 to-transparent border-amber-500/30 flex flex-col items-center justify-center gap-1 text-center backdrop-blur-md">
+                    <span className="text-[11px] 2xl:text-xs font-medium text-slate-300 leading-tight">古建筑</span>
+                    <div className="text-base 2xl:text-lg font-bold font-mono leading-tight text-slate-100">
+                      <AnimatedNumber value={buildingPointsCount} />
                     </div>
-                  )}
-                </div>
+                    <span className="text-[11px] 2xl:text-xs text-slate-400 leading-tight">处</span>
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsAncientBuildingDropdownOpen((v) => !v)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 2xl:px-3 2xl:py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
+                    >
+                      <span className="text-[11px] 2xl:text-xs font-semibold text-slate-200 truncate">
+                        {ancientBuildingZone ? ancientBuildingZone : '筛选区域：全部'}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isAncientBuildingDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isAncientBuildingDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 max-h-48 overflow-y-auto bg-[#0c101c]/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-2xl animate-fadeIn divide-y divide-white/[0.06]">
+                        <button
+                          onClick={() => { setAncientBuildingZone(null); setIsAncientBuildingDropdownOpen(false); }}
+                          className={`w-full px-2.5 py-2 2xl:px-3 2xl:py-2.5 text-left text-[11px] 2xl:text-xs font-semibold transition-colors cursor-pointer ${
+                            !ancientBuildingZone ? 'bg-amber-500/20 text-amber-300' : 'text-slate-300 hover:bg-white/10'
+                          }`}
+                        >
+                          全部
+                        </button>
+                        {buildingSpatialPoints.map((pt) => (
+                          <button
+                            key={pt.id}
+                            onClick={() => { setAncientBuildingZone(pt.name); setIsAncientBuildingDropdownOpen(false); }}
+                            className={`w-full px-2.5 py-2 2xl:px-3 2xl:py-2.5 text-left text-[11px] 2xl:text-xs font-semibold transition-colors cursor-pointer ${
+                              ancientBuildingZone === pt.name ? 'bg-amber-500/20 text-amber-300' : 'text-slate-300 hover:bg-white/10'
+                            }`}
+                          >
+                            {pt.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </MonitorSection>
               </div>
             </div>
 
@@ -1543,8 +1646,8 @@ function MonitorCard({
                 </span>
               }
               badge={<span className="text-[9px] 2xl:text-[10px] text-slate-500 font-mono">{firePointsCount} 处</span>}
-              open={fireEventOpen}
-              onToggle={() => setFireEventOpen((v) => !v)}
+              open={!!fireEventOpen}
+              onToggle={() => onToggleFireEvent?.()}
               accent="rose"
             >
             {/* 模块一：总量 —— 累计完成、发现火点 */}
@@ -1746,7 +1849,7 @@ function MonitorCard({
                       </button>
                     ))}
                   </div>,
-                  document.body
+                  document.fullscreenElement ?? document.body
                 )}
               </div>
             </MonitorSection>
@@ -1828,7 +1931,7 @@ function MonitorCard({
                       </button>
                     ))}
                   </div>,
-                  document.body
+                  document.fullscreenElement ?? document.body
                 )}
               </div>
             </MonitorSection>
@@ -2381,6 +2484,191 @@ export function FireAnalysisResultCard({ result }: { result: { location: string;
   );
 }
 
+// ── 林火检测任务流水线看板：接收 → 筛选 → 执行 三步从左到右流程图，复用「在轨短临气象预报」条形位置与尺寸 ──
+const FIRE_TASK_RECEIVED_LIST = [
+  '疑似热异常线索-01（俄勒冈/爱达荷边界）',
+  '疑似热异常线索-02（哈萨克斯坦草原带）',
+  '疑似热异常线索-03（西伯利亚针叶林）',
+  '疑似热异常线索-04（澳大利亚新南威尔士）',
+  '疑似热异常线索-05（巴西马托格罗索）',
+  '疑似热异常线索-06（希腊伯罗奔尼撒）',
+  '疑似热异常线索-07（加州内华达山麓）',
+  '疑似热异常线索-08（西班牙加泰罗尼亚）',
+  '疑似热异常线索-09（南非林波波省）',
+  '疑似热异常线索-10（智利比奥比奥大区）',
+];
+const FIRE_TASK_FILTERED_LIST = [
+  '疑似热异常线索-01（俄勒冈/爱达荷边界）',
+  '疑似热异常线索-04（澳大利亚新南威尔士）',
+  '疑似热异常线索-07（加州内华达山麓）',
+];
+const FIRE_TASK_EXECUTING_LIST = ['疑似热异常线索-01（俄勒冈/爱达荷边界）'];
+
+function FireTaskFlowStep({
+  stepIndex,
+  title,
+  revealedCount,
+  countLabel,
+  items,
+  accent,
+  isLast,
+}: {
+  stepIndex: number;
+  title: string;
+  revealedCount: number;
+  countLabel: string;
+  items: string[];
+  accent: 'sky' | 'amber' | 'rose';
+  isLast: boolean;
+}) {
+  const accentClasses = {
+    sky: { border: 'border-sky-500/30', bg: 'from-sky-500/15 via-sky-950/10', text: 'text-sky-300', dot: 'bg-sky-400' },
+    amber: { border: 'border-amber-500/30', bg: 'from-amber-500/15 via-amber-950/10', text: 'text-amber-300', dot: 'bg-amber-400' },
+    rose: { border: 'border-rose-500/30', bg: 'from-rose-500/15 via-rose-950/10', text: 'text-rose-300', dot: 'bg-rose-400' },
+  }[accent];
+  const visibleItems = items.slice(0, revealedCount);
+  const listRef = useRef<HTMLDivElement>(null);
+  const isComplete = revealedCount >= items.length && items.length > 0;
+  const canMarquee = isComplete && items.length > 1;
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && !canMarquee) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [revealedCount, canMarquee]);
+
+  return (
+    <div className="flex items-start flex-1 min-w-0">
+      <div className="flex-1 min-w-0">
+        <div className={`p-2.5 rounded-xl border bg-gradient-to-b ${accentClasses.bg} to-transparent ${accentClasses.border}`}>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-4 h-4 rounded-full ${accentClasses.dot} flex items-center justify-center text-[9px] font-bold text-slate-950 shrink-0`}>
+              {stepIndex}
+            </span>
+            <span className="text-xs font-bold text-slate-100 truncate">{title}</span>
+            <span className="ml-auto flex items-baseline gap-1 shrink-0">
+              <span className={`text-lg font-bold font-mono leading-none tabular-nums ${accentClasses.text}`}>{revealedCount}</span>
+              <span className="text-[10px] text-slate-400">{countLabel}</span>
+            </span>
+          </div>
+        </div>
+
+        {canMarquee ? (
+          <div className="mt-1.5 h-[107px] overflow-hidden rounded-lg border border-white/10 bg-black/30">
+            <div
+              className="animate-marquee-vertical divide-y divide-white/[0.06]"
+              style={{ animationDuration: `${items.length * 2.2}s` }}
+            >
+              {[...items, ...items].map((item, idx) => (
+                <div key={`${item}-${idx}`} className="px-2.5 py-1.5 text-[10px] text-slate-300 truncate">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div ref={listRef} className="mt-1.5 max-h-[107px] overflow-y-auto rounded-lg border border-white/10 bg-black/30 divide-y divide-white/[0.06] scroll-smooth">
+            {visibleItems.map((item, idx) => {
+              const isNew = idx === visibleItems.length - 1;
+              return (
+                <div
+                  key={item}
+                  className={`px-2.5 py-1.5 text-[10px] text-slate-300 truncate ${isNew ? 'opacity-0 animate-stage-item-in' : 'opacity-100'}`}
+                >
+                  {item}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {!isLast && <ArrowRight className="w-4 h-4 text-slate-500 shrink-0 mx-1.5 mt-3" />}
+    </div>
+  );
+}
+
+const FIRE_TASK_RECEIVE_STEP_MS = 320;
+const FIRE_TASK_FILTER_STEP_MS = 500;
+const FIRE_TASK_EXECUTE_STEP_MS = 700;
+const FIRE_TASK_STAGE_GAP_MS = 600;
+
+function FireMonitoringTaskBar({ onClose }: { onClose: () => void }) {
+  const [receivedRevealed, setReceivedRevealed] = useState(0);
+  const [filteredRevealed, setFilteredRevealed] = useState(0);
+  const [executingRevealed, setExecutingRevealed] = useState(0);
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    FIRE_TASK_RECEIVED_LIST.forEach((_, idx) => {
+      timers.push(setTimeout(() => setReceivedRevealed(idx + 1), (idx + 1) * FIRE_TASK_RECEIVE_STEP_MS));
+    });
+    const afterReceive = FIRE_TASK_RECEIVED_LIST.length * FIRE_TASK_RECEIVE_STEP_MS + FIRE_TASK_STAGE_GAP_MS;
+
+    FIRE_TASK_FILTERED_LIST.forEach((_, idx) => {
+      timers.push(setTimeout(() => setFilteredRevealed(idx + 1), afterReceive + (idx + 1) * FIRE_TASK_FILTER_STEP_MS));
+    });
+    const afterFilter = afterReceive + FIRE_TASK_FILTERED_LIST.length * FIRE_TASK_FILTER_STEP_MS + FIRE_TASK_STAGE_GAP_MS;
+
+    FIRE_TASK_EXECUTING_LIST.forEach((_, idx) => {
+      timers.push(setTimeout(() => setExecutingRevealed(idx + 1), afterFilter + (idx + 1) * FIRE_TASK_EXECUTE_STEP_MS));
+    });
+
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <div
+      id="fire-monitoring-task-dashboard-bar"
+      className="absolute bottom-3 sm:bottom-4 left-3 sm:left-6 md:left-12 lg:left-16 z-40 w-[820px] max-w-[92vw] rounded-2xl bg-slate-950/45 border border-white/15 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(56,189,248,0.08)] animate-fadeIn text-white font-sans select-none pointer-events-auto"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-30 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer bg-black/30 border border-white/10"
+        title="关闭林火检测任务看板"
+      >
+        <X className="w-4 h-4" />
+      </button>
+
+      <div className="flex items-center gap-2 pl-3 sm:pl-4 pr-11 sm:pr-12 py-2.5 border-b border-white/10 bg-white/[0.04]">
+        <span className="w-1 h-3 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+        <span className="text-xs sm:text-sm font-bold text-slate-100 tracking-wide whitespace-nowrap">林火检测任务</span>
+      </div>
+
+      <div className="flex items-start p-3 sm:p-4">
+        <FireTaskFlowStep
+          stepIndex={1}
+          title="接收任务"
+          revealedCount={receivedRevealed}
+          countLabel="个"
+          items={FIRE_TASK_RECEIVED_LIST}
+          accent="sky"
+          isLast={false}
+        />
+        <FireTaskFlowStep
+          stepIndex={2}
+          title="筛选任务"
+          revealedCount={filteredRevealed}
+          countLabel="个"
+          items={FIRE_TASK_FILTERED_LIST}
+          accent="amber"
+          isLast={false}
+        />
+        <FireTaskFlowStep
+          stepIndex={3}
+          title="执行任务"
+          revealedCount={executingRevealed}
+          countLabel="个"
+          items={FIRE_TASK_EXECUTING_LIST}
+          accent="rose"
+          isLast={true}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── 主组件：InnovativeAppView ──────────────────────────────────────────────────
 export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
   onBackToPlanning,
@@ -2873,8 +3161,8 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
   const [currentZoom, setCurrentZoom] = useState<number>(2.5);
   const [resetTrigger, setResetTrigger] = useState<number>(0);
 
-  // 3D / 2D 维度模式切换（'3d' 三维仿真地球 | '2d' 平面遥感地图）
-  const [viewDimension, setViewDimension] = useState<'3d' | '2d'>('3d');
+  // 3D / 2D 维度模式切换（'3d' 三维仿真地球 | '2d' 平面遥感地图），默认进入 2D 平面视窗
+  const [viewDimension, setViewDimension] = useState<'3d' | '2d'>('2d');
 
   // 3D 地球视角与数据交互状态 (整合自 earth-demo-main)
   const [currentEarthObject, setCurrentEarthObject] = useState<EarthObject>(EARTH_OBJECTS[0]);
@@ -2898,6 +3186,8 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
   // 事件触发任务·杭州米塔碳机场短临期气象预报：展开后在地图底部呼出气象看板
   const [showWeatherForecastBar, setShowWeatherForecastBar] = useState<boolean>(false);
   const [weatherSelectedAirport, setWeatherSelectedAirport] = useState<AirportWeatherItem | null>(null);
+  // 事件触发任务·全球林火自主巡查：展开后在地图底部呼出林火检测任务流水线看板
+  const [fireEventOpen, setFireEventOpen] = useState<boolean>(true);
 
   // 处理点击卫星时的统一联动逻辑：设置当前卫星并自动切换到「卫星数据」看板
   const handleSelectSatellite = useCallback((satId: string) => {
@@ -3274,6 +3564,8 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
             weatherAirportList={AIRPORT_WEATHER_LIST}
             selectedWeatherAirport={weatherSelectedAirport}
             onSelectWeatherAirport={setWeatherSelectedAirport}
+            fireEventOpen={fireEventOpen}
+            onToggleFireEvent={() => setFireEventOpen((v) => !v)}
           />
         </div>
 
@@ -3562,6 +3854,16 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
                 />
               ))}
 
+              {/* 自然资源普查·绿地/森林筛选：对应区域绿色圆点标注 */}
+              {NATURE_SURVEY_ZONE_LIST.map((zone) => (
+                <Marker
+                  key={`nature-zone-dot-${zone.name}`}
+                  position={[zone.lat, zone.lng]}
+                  icon={createNatureZoneDotIcon()}
+                  interactive={false}
+                />
+              ))}
+
               {/* 每日任务执行完毕的地图联动提示：对应经纬度短暂闪烁红点，动画结束后自动移除 */}
               {pulseMarkers.map((p, i) => (
                 <Marker key={`pulse-${i}-${p.lat}-${p.lng}`} position={[p.lat, p.lng]} icon={createPulseIcon()} interactive={false} />
@@ -3609,6 +3911,11 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
           onSelectAirport={setWeatherSelectedAirport}
           selectedAirport={weatherSelectedAirport}
         />
+      )}
+
+      {/* 事件触发任务·全球林火自主巡查：展开后呼出的林火检测任务流水线看板 */}
+      {fireEventOpen && !showWeatherForecastBar && (
+        <FireMonitoringTaskBar onClose={() => setFireEventOpen(false)} />
       )}
     </div>
   )}

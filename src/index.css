@@ -296,6 +296,36 @@
   }
 }
 
+/* 林火检测任务·接收任务列表逐条淡入滑入动效 */
+@keyframes stage-item-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stage-item-in {
+  animation: stage-item-in 0.4s ease both;
+}
+
+/* 林火检测任务·任务列表填满后持续向上循环滚动 */
+@keyframes marquee-vertical {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical linear infinite;
+}
+
 /* ================= 精致现代化滚动条设计 (Sleek Modern Scrollbar) ================= */
 * {
   scrollbar-width: thin;
