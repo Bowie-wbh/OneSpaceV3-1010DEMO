@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneSpace - 原型</title>
+    <meta name="description" content="OneSpace 对话式人工智能星座管控平台，融合智能对话交互与星座任务数据可视化。" />
+    <meta property="og:title" content="OneSpace - 对话式人工智能星座管控平台" />
+    <meta property="og:description" content="OneSpace 对话式人工智能星座管控平台，融合智能对话交互与星座任务数据可视化。" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- CesiumJS Styles and CDN Assets for OneEarth 3D Globe (国内高速 CDN 镜像加速) -->
+    <link href="https://cdn.jsdelivr.net/npm/cesium@1.125.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+    <script>
+      window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.125.0/Build/Cesium/';
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.125.0/Build/Cesium/Cesium.js"></script>
+    <script>
+      if (window.Cesium && window.Cesium.Ion) {
+        window.Cesium.Ion.defaultAccessToken = '';
+      }
+    </script>
+  </head>
+  <body class="bg-base text-primary antialiased selection:bg-blue-500 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+
