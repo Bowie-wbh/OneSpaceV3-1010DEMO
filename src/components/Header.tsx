@@ -72,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3 min-w-0">
         {!isSidebarExpanded && (
           <div className="flex items-baseline gap-1 select-none font-sans shrink-0 animate-fadeIn pl-1">
-            <span className="text-lg font-black tracking-wide bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 dark:from-sky-400 dark:via-blue-400 dark:to-indigo-300 bg-clip-text text-transparent font-sans">
+            <span className="text-2xl font-black tracking-wide bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 dark:from-sky-400 dark:via-blue-400 dark:to-indigo-300 bg-clip-text text-transparent font-sans">
               021模型
             </span>
             <span className="text-slate-300 dark:text-slate-600 font-light text-base mx-0.5 font-sans">
