@@ -268,10 +268,11 @@ function footprintCorners(
   ).map(([dx, dy]) => [lat + dx * cos - dy * sin, lng + dx * sin + dy * cos]);
 }
 
-// 计算能让世界地图（360经度）像素宽度恰好铺满当前容器宽度的连续缩放级别，避免留白或超界重复
-function getWorldCoverZoom(map: L.Map): number {
+// 全屏按容器高度显示完整地图，普通模式按宽度铺满。
+function getWorldCoverZoom(map: L.Map, isFullscreen: boolean): number {
   const size = map.getSize();
-  return Math.log2(Math.max(size.x, 1) / 256) + 0.02;
+  const viewportSize = isFullscreen ? size.y : size.x;
+  return Math.log2(Math.max(viewportSize, 1) / 256) + (isFullscreen ? 0 : 0.02);
 }
 
 // ── 点击地图空白区域：取消已有的卫星选择与轨道选中态（标点自身点击已 stopPropagation，不会误触发） ──
@@ -288,16 +289,19 @@ function MapFlyTo({
   targetPoint,
   resetTrigger, 
   resetNorthTrigger,
+  isFullscreen,
   onResetDone 
 }: { 
   location: Location | null; 
   targetPoint: SpatialMarkerPoint | null;
   resetTrigger: number; 
   resetNorthTrigger?: number;
+  isFullscreen: boolean;
   onResetDone: () => void 
 }) {
   const map = useMap();
   const isWorldViewRef = useRef(true);
+  const lastResetTriggerRef = useRef(resetTrigger);
 
   useEffect(() => {
     if (targetPoint) {
@@ -310,15 +314,17 @@ function MapFlyTo({
   }, [location, targetPoint, map]);
 
   useEffect(() => {
-    if (resetTrigger > 0) {
-      // 全球世界地图全景视角：按当前容器宽度自适应铺满，完整展示全图不留白
-      const coverZoom = getWorldCoverZoom(map);
+    if (resetTrigger !== lastResetTriggerRef.current) {
+      lastResetTriggerRef.current = resetTrigger;
+      // 全球视角按当前模式适配容器；全屏时完整显示地图南北范围
+      map.invalidateSize({ pan: false, animate: false });
+      const coverZoom = getWorldCoverZoom(map, isFullscreen);
       map.setMinZoom(coverZoom);
       isWorldViewRef.current = true;
-      map.flyTo([20, 0], coverZoom, { duration: 1.2 });
+      map.flyTo([isFullscreen ? 0 : 20, 0], coverZoom, { duration: 1.2 });
       onResetDone();
     }
-  }, [resetTrigger, map, onResetDone]);
+  }, [resetTrigger, map, isFullscreen, onResetDone]);
 
   useEffect(() => {
     if (resetNorthTrigger && resetNorthTrigger > 0) {
@@ -332,17 +338,23 @@ function MapFlyTo({
   useEffect(() => {
     const container = map.getContainer();
     const applyCoverZoom = () => {
-      const coverZoom = getWorldCoverZoom(map);
+      map.invalidateSize({ pan: false, animate: false });
+      const coverZoom = getWorldCoverZoom(map, isFullscreen);
       map.setMinZoom(coverZoom);
       if (isWorldViewRef.current) {
-        map.setView([20, 0], coverZoom, { animate: false });
+        map.setView([isFullscreen ? 0 : 20, 0], coverZoom, { animate: false });
       }
     };
     applyCoverZoom();
+    const onDragStart = () => { isWorldViewRef.current = false; };
+    map.on('dragstart', onDragStart);
     const observer = new ResizeObserver(() => applyCoverZoom());
     observer.observe(container);
-    return () => observer.disconnect();
-  }, [map]);
+    return () => {
+      map.off('dragstart', onDragStart);
+      observer.disconnect();
+    };
+  }, [map, isFullscreen]);
 
   return null;
 }
@@ -2622,18 +2634,20 @@ function FireMonitoringTaskBar({ onClose }: { onClose: () => void }) {
       id="fire-monitoring-task-dashboard-bar"
       className="absolute bottom-3 sm:bottom-4 left-3 sm:left-6 md:left-12 lg:left-16 z-40 w-[820px] max-w-[92vw] rounded-2xl bg-slate-950/45 border border-white/15 backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(56,189,248,0.08)] animate-fadeIn text-white font-sans select-none pointer-events-auto"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-30 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer bg-black/30 border border-white/10"
-        title="关闭林火检测任务看板"
-      >
-        <X className="w-4 h-4" />
-      </button>
-
-      <div className="flex items-center gap-2 pl-3 sm:pl-4 pr-11 sm:pr-12 py-2.5 border-b border-white/10 bg-white/[0.04]">
-        <span className="w-1 h-3 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
-        <span className="text-xs sm:text-sm font-bold text-slate-100 tracking-wide whitespace-nowrap">林火检测任务</span>
+      <div className="flex items-center justify-between gap-2 pl-3 sm:pl-4 pr-2 sm:pr-3 py-2 border-b border-white/10 bg-white/[0.04]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-1 h-3 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+          <span className="text-xs sm:text-sm font-bold text-slate-100 tracking-wide whitespace-nowrap">林火检测任务</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer bg-black/30 border border-white/10"
+          title="关闭林火检测任务看板"
+          aria-label="关闭林火检测任务看板"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="flex items-start p-3 sm:p-4">
@@ -3232,7 +3246,8 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
   // 3D 要素筛选面板选中点位飞行
   const handleSelectSpatialPoint = (point: SpatialMarkerPoint) => {
     setSelectedSpatialPoint(point);
-    setTargetFlyPoint(point);
+    // 每次选择都发起新的定位；重复选择同一地区时也能回到该地点。
+    setTargetFlyPoint({ ...point });
     setIsMindMapOpen(false);
   };
 
@@ -3565,12 +3580,18 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
             monitorActiveCategory={monitorActiveCategory}
             onMonitorCategoryChange={setMonitorActiveCategory}
             weatherForecastOpen={showWeatherForecastBar}
-            onToggleWeatherForecast={() => setShowWeatherForecastBar((v) => !v)}
+            onToggleWeatherForecast={() => {
+              setShowWeatherForecastBar(!showWeatherForecastBar);
+              setFireEventOpen(false);
+            }}
             weatherAirportList={AIRPORT_WEATHER_LIST}
             selectedWeatherAirport={weatherSelectedAirport}
             onSelectWeatherAirport={setWeatherSelectedAirport}
             fireEventOpen={fireEventOpen}
-            onToggleFireEvent={() => setFireEventOpen((v) => !v)}
+            onToggleFireEvent={() => {
+              setFireEventOpen(!fireEventOpen || showWeatherForecastBar);
+              setShowWeatherForecastBar(false);
+            }}
           />
         </div>
 
@@ -3672,6 +3693,7 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
                 id="btn-fly-global-2d"
                 onClick={() => {
                   setSelectedSpatialPoint(null);
+                  setTargetFlyPoint(null);
                   setSelectedId(null);
                   setResetTrigger((prev) => prev + 1);
                 }}
@@ -3700,13 +3722,11 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
               key="2d-leaflet-map-container"
               center={[20, 0]}
               zoom={2}
-              minZoom={2}
+              minZoom={0}
               maxZoom={18}
               zoomSnap={0}
               zoomDelta={0.5}
-              maxBounds={[[-90, -180], [90, 180]]}
-              maxBoundsViscosity={1.0}
-              worldCopyJump={false}
+              worldCopyJump={true}
               zoomControl={false}
               attributionControl={false}
               style={{
@@ -3723,20 +3743,21 @@ export const InnovativeAppView: React.FC<InnovativeAppViewProps> = ({
                 url="https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution="Esri World Imagery"
                 maxZoom={18}
-                noWrap={true}
+                noWrap={false}
               />
               <TileLayer
                 url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
                 attribution="Esri World Boundaries and Places"
                 maxZoom={18}
                 opacity={0.85}
-                noWrap={true}
+                noWrap={false}
               />
               <MapFlyTo
                 location={focusedLocation}
                 targetPoint={targetFlyPoint}
                 resetTrigger={resetTrigger}
                 resetNorthTrigger={resetNorthTrigger2D}
+                isFullscreen={isKanbanFullscreen}
                 onResetDone={() => setSelectedId(null)}
               />
               <MapZoomObserver onZoomChange={setCurrentZoom} />

@@ -365,8 +365,10 @@ export const CesiumGlobe: React.FC<CesiumGlobeProps> = ({
 
   // 平滑飞往指定的空间要素标绘点（以目标点为中心直接放大，绝不旋转地球）
   const flyToPoint = useCallback((point: SpatialMarkerPoint, onComplete?: () => void) => {
-    if (!viewerRef.current || isFlyingRef.current) return;
+    if (!viewerRef.current) return;
     const viewer = viewerRef.current;
+    // 连续筛选地区时中断上一次飞行，始终定位到最新选择的地区。
+    if (isFlyingRef.current) viewer.camera.cancelFlight();
     isFlyingRef.current = true;
 
     viewer.camera.flyTo({
