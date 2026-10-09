@@ -1442,7 +1442,7 @@ export const TaskManagementKanban: React.FC<TaskManagementKanbanProps> = ({
                   <span className="font-bold text-blue-600 dark:text-sky-400 truncate">{task.taskMode}</span>
                 </div>
                 <div className="flex items-baseline gap-1.5 px-2 py-1.5 rounded-lg bg-white dark:bg-[#121829] border border-slate-100 dark:border-white/[0.04]">
-                  <span className="text-slate-400 shrink-0">算力卡时</span>
+                  <span className="text-slate-400 shrink-0">算力星时</span>
                   <span className="font-mono font-bold text-violet-600 dark:text-violet-400 truncate">
                     {task.npuHours ?? (task.computingTask && task.computingTask !== '无' ? '0.05h' : '0.00h')}
                   </span>
@@ -1668,7 +1668,7 @@ export const TaskManagementKanban: React.FC<TaskManagementKanbanProps> = ({
                       {timeSortOrder === 'desc' && <ArrowDown size={12} />}
                     </button>
                   </th>
-                  <th className="py-2.5 px-3 font-semibold whitespace-nowrap w-24">算力卡时</th>
+                  <th className="py-2.5 px-3 font-semibold whitespace-nowrap w-24">算力星时</th>
                   <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Token消耗</th>
                 </tr>
               </thead>
